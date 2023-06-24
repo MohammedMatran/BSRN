@@ -1,4 +1,14 @@
-// The header files for the use of functions and structures
+// title:        Message Queues.c
+// description:  Main code in C
+// author:       Mohammed Matran
+// date:         25.06.2023
+// compile with: gcc Message Queues.c -o message queues
+// nodes:        This code uses message queues to enable communication between a consumer process (child) and a producer process (parent).
+//               It is implemented using POSIX IPC (interprocess communication) mechanisms.
+//               The consumer process receives messages, calculates the average of the received values and generates a report.
+//               At the same time, the producer process generates random numbers, packages them into messages  and sends them to the consumer process.
+
+// Libraries used in the program
 #include <stdio.h>
 #include <stdlib.h>
 #include <time.h>
