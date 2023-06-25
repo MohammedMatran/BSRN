@@ -116,9 +116,9 @@ void pipeFunc() { //Function for implementing data transfer using Pipes
     } 
 }
 int main() {
-    srand(time(NULL));
+    srand(time(NULL));//// Seed the random number generator
 
-    signal(SIGINT, terminate);
+    signal(SIGINT, terminate); //set signal-Handler for Ctrl-C
     pipeFunc();
 
     return 0;
