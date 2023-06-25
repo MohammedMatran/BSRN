@@ -9,13 +9,11 @@
 
 #define SHM_SIZE 1024
 
-int x = 0;
-int sum = 0;
-
-int conv() {
-    int random = rand() % 100000 + 1;
-    return random;
-}
+typedef struct {
+    int measurement;
+    int sum;
+    int count;
+} SharedData;
 
 void writeToLog(int value) {
     FILE* file = fopen("werte.txt", "a");
@@ -23,16 +21,20 @@ void writeToLog(int value) {
     fclose(file);
 }
 
-double stat(int value) {
-    x++;
-    sum += value;
-    double middleValue = (double)sum / x;
+double stat(SharedData* sharedData) {
+    sharedData->sum += sharedData->measurement;
+    sharedData->count++;
+    double middleValue = (double)sharedData->sum / sharedData->count;
     return middleValue;
 }
 
-void report(double value) {
-    printf("Sum: %d\n", sum);
+void report(SharedData* sharedData, double value) {
+    printf("Sum: %d\n", sharedData->sum);
     printf("Average: %.2f\n", value);
+}
+
+int conv() {
+    return rand() % 100000 + 1;
 }
 
 void terminate(int signum) {
@@ -40,7 +42,9 @@ void terminate(int signum) {
     exit(0);
 }
 
-void child_process(int* shm_ptr, int sem_id) {
+void child_process(int* shm_ptr, int sem_id, int shm_id) {
+    SharedData* sharedData = (SharedData*)shmat(shm_id, NULL, 0);
+
     while (1) {
         int random = conv();
 
@@ -50,15 +54,15 @@ void child_process(int* shm_ptr, int sem_id) {
         // Wait for access to shared memory
         semop(sem_id, &sem_wait, 1);
 
-	// Write random number to shared memory
-        *shm_ptr = random;
+        // Write random number to shared memory
+        sharedData->measurement = random;
 
-	// Write random number to log file
+        // Write random number to log file
         writeToLog(random);
-	
-	// Calculate and report middle value
-        double middleValue = stat(random);
-        report(middleValue);
+
+        // Calculate and report middle value
+        double middleValue = stat(sharedData);
+        report(sharedData, middleValue);
 
         // Signal release of shared memory
         semop(sem_id, &sem_signal, 1);
@@ -67,7 +71,9 @@ void child_process(int* shm_ptr, int sem_id) {
     }
 }
 
-void parent_process(int* shm_ptr, int sem_id) {
+void parent_process(int* shm_ptr, int sem_id, int shm_id) {
+    SharedData* sharedData = (SharedData*)shmat(shm_id, NULL, 0);
+
     while (1) {
         double middleValue;
 
@@ -77,11 +83,11 @@ void parent_process(int* shm_ptr, int sem_id) {
         // Wait for access to shared memory
         semop(sem_id, &sem_wait, 1);
 
-	// Read value from shared memory and calculate middle value
-        middleValue = stat(*shm_ptr);
+        // Calculate middle value
+        middleValue = stat(sharedData);
 
-	// Report middle value
-        report(middleValue);
+        // Report middle value
+        report(sharedData, middleValue);
 
         // Signal release of shared memory
         semop(sem_id, &sem_signal, 1);
@@ -97,16 +103,15 @@ int main() {
 
     // Create shared memory segment
     key_t shm_key = ftok(".", 'x');
-
-    int shm_id = shmget(shm_key, SHM_SIZE, IPC_CREAT | 0666);
+    int shm_id = shmget(shm_key, sizeof(SharedData), IPC_CREAT | 0666);
     if (shm_id < 0) {
         printf("Error creating shared memory segment.\n");
         return 1;
     }
 
     // Attach shared memory segment
-    int* shm_ptr = (int*)shmat(shm_id, NULL, 0);
-    if (shm_ptr == (int*)-1) {
+    SharedData* shm_ptr = (SharedData*)shmat(shm_id, NULL, 0);
+    if (shm_ptr == (SharedData*)-1) {
         printf("Error attaching shared memory segment.\n");
         return 1;
     }
@@ -129,10 +134,10 @@ int main() {
         return 1;
     } else if (pid == 0) {
         // Child process
-        child_process(shm_ptr, sem_id);
+        child_process(shm_ptr, sem_id, shm_id);
     } else {
         // Parent process
-        parent_process(shm_ptr, sem_id);
+        parent_process(shm_ptr, sem_id, shm_id);
     }
 
     // Detach shared memory segment
